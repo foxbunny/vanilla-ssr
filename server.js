@@ -20,25 +20,25 @@ let // Server business logic
   brotliCompress = promisify(zlib.brotliCompress),
   toRelativeUrl = path.sep === '/'
     ? x => path.relative(PUBLIC_DIR, x)
-    : x => path.relative(PUBLIC_DIR, x).replace(/\\/g, '/')
-addFileToCache = filePath =>
-  fs.promises.readFile(filePath)
-    .then(buffer =>
-      brotliCompress(buffer)
-        .then(compressedBuffer => ({ compressedBuffer, buffer })),
-    )
-    .then(({ compressedBuffer, buffer }) => {
-      let hexdigest = crypto.createHash('sha256').update(buffer).digest('hex')
-      let mimeType = MIME_TYPES[path.extname(filePath)] || DEFAULT_MIME_TYPE
-      let url = toRelativeUrl(filePath)
-      staticFiles[url] = {
-        mimeType,
-        hexdigest,
-        etag: `"${hexdigest}"`,
-        buffer,
-        compressedBuffer,
-      }
-    }),
+    : x => path.relative(PUBLIC_DIR, x).replace(/\\/g, '/'),
+  addFileToCache = filePath =>
+    fs.promises.readFile(filePath)
+      .then(buffer =>
+        brotliCompress(buffer)
+          .then(compressedBuffer => ({ compressedBuffer, buffer })),
+      )
+      .then(({ compressedBuffer, buffer }) => {
+        let hexdigest = crypto.createHash('sha256').update(buffer).digest('hex')
+        let mimeType = MIME_TYPES[path.extname(filePath)] || DEFAULT_MIME_TYPE
+        let url = toRelativeUrl(filePath)
+        staticFiles[url] = {
+          mimeType,
+          hexdigest,
+          etag: `"${hexdigest}"`,
+          buffer,
+          compressedBuffer,
+        }
+      }),
   cacheStaticFiles = start =>
     fs.promises.readdir(start, { withFileTypes: true })
       .then(entries => {
@@ -117,6 +117,9 @@ let // Request handlers
   },
   handleMissing = (req, res) => {
     sendHTML(res, missingPageHTML, 404)
+  },
+  handleNoMethod = (req, res) => {
+    res.writeHead(405).end()
   }
 
 // Cache the static files and start the server
@@ -127,10 +130,12 @@ cacheStaticFiles(PUBLIC_DIR).then(() =>
       let pathSegments = req.url.slice(1).split('/')
       switch (pathSegments[0]) {
         case 'public':
-          handlePublic(req, res)
+          if (req.method !== 'GET') handleNoMethod(req, res)
+          else handlePublic(req, res)
           break
         case '':
-          handleHome(req, res)
+          if (req.method !== 'GET') handleNoMethod(req, res)
+          else handleHome(req, res)
           break
       }
 
@@ -139,5 +144,5 @@ cacheStaticFiles(PUBLIC_DIR).then(() =>
     })
     .listen(PORT, HOST, () => {
       console.log(`Server listening on http://${HOST}:${PORT}`)
-    })
+    }),
 )
